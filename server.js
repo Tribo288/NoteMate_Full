@@ -72,4 +72,6 @@ app.use(express.static("."));
 
 // Render bắt buộc dùng port động
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, (
+app.listen(PORT, () => {
+    console.log("Server đang chạy trên port " + PORT);
+});
