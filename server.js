@@ -10,65 +10,12 @@ app.use(express.json());
 const GROUP_FILE = "group.json";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// --- BIẾN TOÀN CỤC LƯU MODEL ĐANG DÙNG ---
-// Mặc định ban đầu (phòng hờ không tìm thấy gì)
-let CURRENT_MODEL = "gemini-1.5-flash"; 
-
-// --- HÀM TỰ ĐỘNG TÌM MODEL TỐT NHẤT ---
-async function autoDetectModel() {
-    if (!GEMINI_API_KEY) return;
-    
-    console.log("🔄 Đang quét tìm model phù hợp...");
-    try {
-        const res = await axios.get(
-            `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`
-        );
-        
-        const models = res.data.models || [];
-        
-        // Danh sách ưu tiên (Nhanh nhất -> Thông minh nhất -> Cũ nhất)
-        const priority = [
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-pro",
-            "gemini-1.0-pro",
-            "gemini-pro"
-        ];
-
-        // Tìm model khả dụng đầu tiên khớp với danh sách ưu tiên
-        let foundModel = null;
-        for (let p of priority) {
-            const match = models.find(m => m.name.endsWith(p)); // Kiểm tra đuôi tên
-            if (match) {
-                // API trả về dạng "models/gemini-1.5-flash", ta chỉ cần lấy tên sau dấu /
-                CURRENT_MODEL = match.name.replace("models/", ""); 
-                foundModel = CURRENT_MODEL;
-                break;
-            }
-        }
-
-        if (foundModel) {
-            console.log(`✅ Đã tự động chọn model: [ ${foundModel} ]`);
-        } else {
-            console.log("⚠️ Không tìm thấy model ưu tiên, dùng mặc định:", CURRENT_MODEL);
-        }
-
-    } catch (e) {
-        console.error("❌ Lỗi khi tự động tìm model (Sẽ dùng mặc định):", e.message);
-    }
-}
-
-// Chạy hàm tìm model ngay khi server bật
-autoDetectModel();
-
-
-// --- CÁC API CŨ ---
-
 // Tạo file group chat ảo
 if (!fs.existsSync(GROUP_FILE)) {
     try { fs.writeFileSync(GROUP_FILE, "[]"); } catch (e) {}
 }
 
+// 1. API Lấy tin nhắn nhóm
 app.get("/groupMessages", (req, res) => {
     try {
         if (!fs.existsSync(GROUP_FILE)) return res.json([]);
@@ -77,6 +24,7 @@ app.get("/groupMessages", (req, res) => {
     } catch (error) { res.json([]); }
 });
 
+// 2. API Gửi tin nhắn nhóm
 app.post("/groupMessages", (req, res) => {
     const { name, text } = req.body;
     if (!name || !text) return res.status(400).json({ error: "Thiếu dữ liệu" });
@@ -92,36 +40,58 @@ app.post("/groupMessages", (req, res) => {
     } catch (error) { res.json({ success: false }); }
 });
 
-// --- API CHATBOT (SỬ DỤNG MODEL TỰ TÌM ĐƯỢC) ---
+// 3. API Chatbot AI (CƠ CHẾ THỬ NHIỀU MODEL)
 app.post("/bot", async (req, res) => {
     const { text } = req.body;
-    console.log(`User hỏi (Model: ${CURRENT_MODEL}):`, text);
+    console.log("User hỏi:", text);
 
     if (!GEMINI_API_KEY) {
-        return res.json({ sender: "Bot", text: "Lỗi: Chưa có API Key." });
+        return res.json({ sender: "Bot", text: "Lỗi Server: Chưa cài API Key." });
     }
 
-    try {
-        const result = await axios.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-            { contents: [{ parts: [{ text: text }] }] },
-            { headers: { "Content-Type": "application/json" } }
-        );
+    // Danh sách model để thử lần lượt
+    const modelsToTry = [
+        "gemini-1.5-flash",       // Ưu tiên 1: Nhanh, mới
+        "gemini-1.5-pro",         // Ưu tiên 2: Thông minh
+        "gemini-1.0-pro",         // Ưu tiên 3: Bản ổn định cũ
+        "gemini-pro"              // Ưu tiên 4: Tên gốc (hiếm khi chạy được ở bản mới nhưng cứ thử)
+    ];
 
-        const botReply = result.data.candidates?.[0]?.content?.parts?.[0]?.text || "Bot bó tay.";
-        res.json({ sender: "Bot", text: botReply });
+    let botReply = null;
+    let errorLog = "";
 
-    } catch (err) {
-        console.error("--- LỖI API ---");
-        console.error(err.response?.data || err.message);
-        
-        // Nếu lỗi 404, thử kích hoạt lại việc tìm model cho lần sau
-        if (err.response?.status === 404) {
-            console.log("Gặp lỗi 404, đang thử quét lại model...");
-            autoDetectModel(); 
+    // Vòng lặp thử từng model
+    for (const model of modelsToTry) {
+        try {
+            console.log(`🔄 Đang thử model: ${model}...`);
+            const result = await axios.post(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+                { contents: [{ parts: [{ text: text }] }] },
+                { headers: { "Content-Type": "application/json" } }
+            );
+
+            // Nếu chạy đến đây tức là thành công!
+            botReply = result.data.candidates?.[0]?.content?.parts?.[0]?.text;
+            console.log(`✅ Thành công với model: ${model}`);
+            break; // Thoát vòng lặp ngay
+
+        } catch (err) {
+            console.log(`❌ Model ${model} thất bại (Lỗi ${err.response?.status || 'Unknown'})`);
+            errorLog = err.response?.data?.error?.message || err.message;
+            // Tiếp tục vòng lặp để thử model tiếp theo...
         }
+    }
 
-        res.json({ sender: "Bot", text: "Lỗi kết nối hoặc model không hỗ trợ. Vui lòng thử lại sau 5 giây." });
+    // Kết quả cuối cùng
+    if (botReply) {
+        res.json({ sender: "Bot", text: botReply });
+    } else {
+        console.error("--- TẤT CẢ MODEL ĐỀU THẤT BẠI ---");
+        console.error("Lỗi cuối cùng:", errorLog);
+        res.json({ 
+            sender: "Bot", 
+            text: "Bot đang bị lỗi kết nối với Google (Hết lượt dùng hoặc sai Key). Hãy kiểm tra lại API Key của bạn." 
+        });
     }
 });
 
