@@ -61,7 +61,7 @@ app.post("/groupMessages", (req, res) => {
     }
 });
 
-// 3. API Chatbot AI (Đã sửa sang model gemini-pro để fix lỗi 404)
+// 3. API Chatbot AI (Đã cập nhật sang model gemini-1.5-flash)
 app.post("/bot", async (req, res) => {
     const { text } = req.body;
     
@@ -78,9 +78,9 @@ app.post("/bot", async (req, res) => {
     }
 
     try {
-        // Gửi yêu cầu đến Google (Dùng model gemini-pro ổn định nhất)
+        // SỬA LỖI Ở ĐÂY: Đổi 'gemini-pro' thành 'gemini-1.5-flash'
         const result = await axios.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
             {
                 contents: [{
                     parts: [{ text: text }]
@@ -97,6 +97,7 @@ app.post("/bot", async (req, res) => {
     } catch (err) {
         // Ghi chi tiết lỗi ra Log của Render để debug
         console.error("---------------- LỖI GEMINI API ----------------");
+        // In rõ lỗi phản hồi từ Google nếu có
         console.error(err.response?.data || err.message);
         console.error("------------------------------------------------");
 
