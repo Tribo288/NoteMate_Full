@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>NoteMate++</title>
+<style>
+body {
+    margin: 0;
+    font-family: Arial;
+    display: flex;
+    height: 100vh;
+    background: #f0f2f5;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 220px;
+    background: #004aad;
+    color: white;
+    padding: 20px 10px;
+}
+.sidebar div {
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    background: #005be0;
+    text-align: center;
+    font-size: 18px;
+}
+.sidebar div:hover {
+    background: #0077ff;
+}
+
+/* Main */
+.main { flex: 1; padding: 20px; }
+
+/* Ghi âm */
+.record-box {
+    background: #fff;
+    padding: 20px;
+    width: 60%;
+    border-radius: 12px;
+    box-shadow: 0 0 10px #00000033;
+}
+.audio-list {
+    margin-top: 15px;
+    padding: 10px;
+    background: #d0e4ff;
+    border-radius: 8px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+.record-btn {
+    background: red;
+    color: white;
+    padding: 8px 20px;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+}
+
+/* Popups */
+.popup {
+    width: 350px;
+    height: 450px;
+    position: fixed;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 0 12px #00000055;
+    right: 20px;
+    bottom: 20px;
+    display: none;
+    flex-direction: column;
+}
+.popup header {
+    background: #007bff;
+    color: white;
+    padding: 10px;
+    border-radius: 12px 12px 0 0;
+    cursor: move;
+    text-align: center;
+}
+.messages {
+    flex: 1;
+    padding: 10px;
+    overflow-y: auto;
+    font-size: 15px;
+}
+.input-area {
+    display: flex;
+    padding: 10px;
+}
+.input-area input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #aaa;
+    border-radius: 8px;
+}
+.input-area button {
+    margin-left: 5px;
+    background: #007bff;
+    border: none;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+/* Note popup */
+#notePopup {
+    width: 400px;
+    height: 300px;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+}
+#notePopup textarea {
+    flex: 1;
+    margin: 10px;
+    resize: none;
+    padding: 10px;
+    border-radius: 8px;
+}
+
+</style>
+</head>
+<body>
+<div id="namePopup" style="
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 0 20px #0003;
+    width: 300px;
+    text-align: center;
+    z-index: 2000;
+">
+    <h3>Nhập tên của bạn</h3>
+    <input id="nameInput" placeholder="Tên..." 
+           style="width:90%; padding:8px; border-radius:8px; margin-bottom:10px;">
+    <button onclick="saveName()" style="
+        padding:8px 20px; 
+        background:#007bff; 
+        color:white; 
+        border:none; 
+        border-radius:8px;
+        cursor:pointer;
+    ">OK</button>
+</div>
+<div class="sidebar">
+    <div onclick="openNote()">📝 Ghi chú</div>
+    <div onclick="toggleChat()">🤖 Chatbot AI</div>
+    <div onclick="openGroupChat()">🌍 Cộng đồng</div>
+</div>
+
+<div class="main">
+    <div class="record-box">
+        <h2>Ghi âm</h2>
+        <button class="record-btn">Bắt đầu ghi</button>
+        <div class="audio-list"></div>
+    </div>
+</div>
+
+<!-- Chatbot -->
+<div id="chatPopup" class="popup">
+    <header>Chatbot AI</header>
+    <div id="messages" class="messages"></div>
+    <div class="input-area">
+        <input id="msgInput" />
+        <button onclick="sendBotMessage()">Gửi</button>
+    </div>
+</div>
+
+<!-- Group Chat -->
+<div id="groupChatPopup" class="popup">
+    <header>Cộng đồng</header>
+    <div id="groupMessages" class="messages"></div>
+    <div class="input-area">
+        <input id="groupMsgInput" />
+        <button onclick="sendGroupMessage()">Gửi</button>
+    </div>
+</div>
+
+<!-- Note -->
+<div id="notePopup" class="popup" style="display:flex;">
+    <header>Ghi chú</header>
+    <textarea id="noteText" placeholder="Nhập ghi chú..."></textarea>
+</div>
+
+<script>
+// ====== Lưu tên người dùng ======
+function saveName(){
+    const name = document.getElementById("nameInput").value.trim();
+    if(!name) return alert("Hãy nhập tên!");
+
+    localStorage.setItem("username", name);
+
+    document.getElementById("namePopup").style.display = "none";
+}
+
+// Kiểm tra tên khi vào trang
+window.onload = () => {
+    if (!localStorage.getItem("username")) {
+        document.getElementById("namePopup").style.display = "block";
+    } else {
+        document.getElementById("namePopup").style.display = "none";
+    }
+};
+
+// ==================== Drag Popup ====================
+function dragElement(elmnt){
+    const header = elmnt.querySelector("header");
+    let x = 0, y = 0, dx = 0, dy = 0;
+
+    header.onmousedown = e => {
+        dx = e.clientX;
+        dy = e.clientY;
+        document.onmousemove = move;
+        document.onmouseup = stop;
+    };
+    function move(e){
+        x = dx - e.clientX;
+        y = dy - e.clientY;
+        dx = e.clientX;
+        dy = e.clientY;
+        elmnt.style.left = (elmnt.offsetLeft - x) + "px";
+        elmnt.style.top = (elmnt.offsetTop - y) + "px";
+    }
+    function stop(){
+        document.onmousemove = null;
+        document.onmouseup = null;
+    }
+}
+dragElement(chatPopup);
+dragElement(groupChatPopup);
+dragElement(notePopup);
+
+// ==================== Popups Control ====================
+function openNote(){ notePopup.style.display = "flex"; }
+function toggleChat(){
+    chatPopup.style.display = (chatPopup.style.display==="flex")?"none":"flex";
+}
+function openGroupChat(){
+    groupChatPopup.style.display = "flex";
+}
+
+// ==================== Ghi âm ====================
+let mediaRecorder;
+let chunks = [];
+const recordBtn = document.querySelector(".record-btn");
+const audioList = document.querySelector(".audio-list");
+
+recordBtn.onclick = async () => {
+    if(recordBtn.textContent === "Bắt đầu ghi"){
+        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+        mediaRecorder = new MediaRecorder(stream);
+        chunks = [];
+        mediaRecorder.ondataavailable = e => chunks.push(e.data);
+        mediaRecorder.onstop = () => {
+            const audio = document.createElement("audio");
+            audio.controls = true;
+            audio.src = URL.createObjectURL(new Blob(chunks));
+            audioList.appendChild(audio);
+        };
+        mediaRecorder.start();
+        recordBtn.textContent = "Dừng ghi";
+    } else {
+        mediaRecorder.stop();
+        recordBtn.textContent = "Bắt đầu ghi";
+    }
+};
+
+// ==================== API Chat + Realtime ====================
+const API_URL = "http://localhost:3000/messages";
+
+async function sendGroupMessage(){
+    const text = groupMsgInput.value.trim();
+    if(!text) return;
+    const name = localStorage.getItem("username");
+    localStorage.setItem("username", name);
+
+    await fetch(API_URL, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json"},
+        body:JSON.stringify({name, text})
+    });
+    groupMsgInput.value = "";
+    loadMessages();
+}
+
+async function sendBotMessage(){
+    const text = msgInput.value.trim();
+    if(!text) return;
+    await fetch(API_URL, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json"},
+        body:JSON.stringify({name:"Bạn", text})
+    });
+    msgInput.value = "";
+    loadMessages();
+}
+
+// Reload messages every 2 seconds
+async function loadMessages(){
+    const res = await fetch(API_URL);
+    const data = await res.json();
+    groupMessages.innerHTML = "";
+    messages.innerHTML = "";
+
+    data.forEach(m=>{
+        const div = document.createElement("div");
+        div.innerHTML = `<strong>${m.sender}:</strong> ${m.text}`;
+
+        // group chat
+        groupMessages.appendChild(div.cloneNode(true));
+
+        // chatbot
+        if(m.sender === "Bạn" || m.sender === "Bot"){
+            messages.appendChild(div.cloneNode(true));
+        }
+    });
+
+    groupMessages.scrollTop = groupMessages.scrollHeight;
+    messages.scrollTop = messages.scrollHeight;
+}
+setInterval(loadMessages, 2000);
+
+</script>
+
+</body>
+</html>
+
