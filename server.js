@@ -9,13 +9,12 @@ app.use(express.json());
 
 const GROUP_FILE = "group.json";
 
-// Lấy Key Hugging Face
-const HUGGING_FACE_API_KEY = process.env.HUGGING_FACE_API_KEY;
+// Lấy Key Groq từ biến môi trường
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-// --- ĐỔI SANG MODEL NHẸ HƠN VÀ ỔN ĐỊNH HƠN ---
-const HF_MODEL = "HuggingFaceH4/zephyr-7b-beta"; 
-// Link API
-const API_URL = `https://api-inference.huggingface.co/models/${HF_MODEL}`;
+// Cấu hình Model Groq (Dùng Llama 3 - Rất xịn)
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const MODEL_NAME = "llama3-8b-8192"; 
 
 // Tạo file group chat ảo
 if (!fs.existsSync(GROUP_FILE)) {
@@ -47,86 +46,57 @@ app.post("/groupMessages", (req, res) => {
     } catch (error) { res.json({ success: false }); }
 });
 
-// --- HÀM GỌI HUGGING FACE (CÓ RETRY) ---
-async function queryHuggingFace(text, retries = 5) {
-    try {
-        // Prompt được tối ưu cho Zephyr
-        const prompt = `<|system|>\nBạn là trợ lý ảo hữu ích, trả lời ngắn gọn bằng tiếng Việt.</s>\n<|user|>\n${text}</s>\n<|assistant|>\n`;
-
-        const response = await axios.post(
-            API_URL,
-            {
-                inputs: prompt,
-                parameters: {
-                    max_new_tokens: 250,
-                    return_full_text: false,
-                    temperature: 0.7
-                }
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${HUGGING_FACE_API_KEY}`,
-                    "Content-Type": "application/json",
-                },
-            }
-        );
-        return response.data[0].generated_text;
-
-    } catch (error) {
-        const errData = error.response?.data;
-        // Nếu lỗi là "Model is loading" (Model đang khởi động)
-        if (errData?.error?.includes("loading")) {
-            if (retries > 0) {
-                const waitTime = Math.ceil(errData.estimated_time || 10);
-                console.log(`⏳ Model đang bật... Đợi ${waitTime} giây...`);
-                // Chờ và gọi lại
-                await new Promise(r => setTimeout(r, waitTime * 1000));
-                return queryHuggingFace(text, retries - 1);
-            }
-        }
-        throw error;
-    }
-}
-
-// 3. API Chatbot AI
+// 3. API Chatbot AI (Dùng Groq - Siêu nhanh)
 app.post("/bot", async (req, res) => {
     const { text } = req.body;
     console.log("User hỏi:", text);
 
-    if (!HUGGING_FACE_API_KEY) {
+    if (!GROQ_API_KEY) {
         return res.json({ 
             sender: "Bot", 
-            text: "LỖI CÀI ĐẶT: Bạn chưa thêm biến HUGGING_FACE_API_KEY vào Render." 
+            text: "Lỗi Server: Bạn chưa cài GROQ_API_KEY trên Render." 
         });
     }
 
     try {
-        const botReply = await queryHuggingFace(text);
-        res.json({ sender: "Bot", text: botReply.trim() });
+        const response = await axios.post(
+            GROQ_API_URL,
+            {
+                model: MODEL_NAME,
+                messages: [
+                    {
+                        role: "system",
+                        content: "Bạn là trợ lý ảo hữu ích, vui vẻ. Hãy trả lời câu hỏi bằng tiếng Việt ngắn gọn, súc tích."
+                    },
+                    {
+                        role: "user",
+                        content: text
+                    }
+                ],
+                temperature: 0.7
+            },
+            {
+                headers: {
+                    "Authorization": `Bearer ${GROQ_API_KEY}`,
+                    "Content-Type": "application/json"
+                }
+            }
+        );
+
+        // Lấy câu trả lời từ Groq
+        const botReply = response.data.choices[0]?.message?.content || "Bot đang suy nghĩ...";
+        res.json({ sender: "Bot", text: botReply });
 
     } catch (err) {
-        console.error("--- LỖI API ---");
-        // In lỗi chi tiết ra log Render
-        const errorDetails = err.response?.data || err.message;
-        console.error(errorDetails);
+        console.error("--- LỖI GROQ API ---");
+        console.error(err.response?.data || err.message);
 
-        // --- QUAN TRỌNG: Trả về lỗi chi tiết cho User thấy để sửa ---
-        let userMessage = "Lỗi kết nối.";
-        
-        if (err.response?.status === 401) {
-            userMessage = "Lỗi 401: API Key không đúng hoặc không có quyền truy cập.";
-        } else if (err.response?.status === 503) {
-            userMessage = "Lỗi 503: Server Hugging Face đang quá tải. Hãy thử lại sau 1 phút.";
-        } else if (typeof errorDetails === 'object') {
-             userMessage = "Lỗi lạ: " + JSON.stringify(errorDetails);
-        } else {
-             userMessage = "Lỗi: " + errorDetails;
-        }
+        // Xử lý thông báo lỗi dễ hiểu
+        let msg = "Lỗi kết nối Groq.";
+        if (err.response?.status === 401) msg = "Sai API Key Groq.";
+        if (err.response?.status === 429) msg = "Bot đang quá tải (Rate Limit), hãy đợi vài giây.";
 
-        res.json({ 
-            sender: "Bot", 
-            text: `⚠️ ${userMessage}` 
-        });
+        res.json({ sender: "Bot", text: `⚠️ ${msg}` });
     }
 });
 
