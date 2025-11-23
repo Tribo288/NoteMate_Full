@@ -50,3 +50,4 @@ app.post("/messages", async (req, res) => {
 
         botReply = result.data.candidates[0].c
 
+app.use(express.static("."));
