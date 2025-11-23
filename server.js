@@ -15,7 +15,8 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY;
 // Cấu hình Model Groq (Dùng Llama 3 - Rất xịn)
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL_NAME = "llama3-8b-8192"; 
-
+//llama-3.1-8b-instant
+//llama-3.3-70b-versatile
 // Tạo file group chat ảo
 if (!fs.existsSync(GROUP_FILE)) {
     try { fs.writeFileSync(GROUP_FILE, "[]"); } catch (e) {}
