@@ -9,69 +9,64 @@ app.use(express.json());
 
 const GROUP_FILE = "group.json";
 
-// ============================================================
-// QUAN TRỌNG: Hãy dán API Key Gemini của bạn vào dòng dưới đây
-const GEMINI_API_KEY = "AIzaSyAUsoZeOAMP57GpnoQWYc6Bkc364nDeG10"; 
-// Ví dụ: const GEMINI_API_KEY = "AIzaSy...";
-// ============================================================
+// Lấy Key từ biến môi trường của Render
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// Tạo file group chat nếu chưa tồn tại
+// Tạo file data ảo nếu chưa có (Render không cho lưu file vĩnh viễn, nên mỗi lần restart sẽ mất tin nhắn nhóm cũ - đây là đặc tính của gói Free)
 if (!fs.existsSync(GROUP_FILE)) {
     fs.writeFileSync(GROUP_FILE, "[]");
 }
 
-// API: Lấy tin nhắn nhóm
 app.get("/groupMessages", (req, res) => {
     try {
-        if (!fs.existsSync(GROUP_FILE)) {
-            fs.writeFileSync(GROUP_FILE, "[]");
-            return res.json([]);
-        }
+        if (!fs.existsSync(GROUP_FILE)) return res.json([]);
         const data = fs.readFileSync(GROUP_FILE, "utf8");
-        // Nếu file rỗng thì trả về mảng rỗng để tránh lỗi
-        if (!data.trim()) return res.json([]);
-        res.json(JSON.parse(data));
-    } catch (error) {
-        console.error("Lỗi đọc file:", error);
-        res.json([]); 
-    }
+        res.json(data ? JSON.parse(data) : []);
+    } catch (e) { res.json([]); }
 });
 
-// API: Gửi tin nhắn nhóm
 app.post("/groupMessages", (req, res) => {
     const { name, text } = req.body;
-    if (!name || !text) return res.status(400).json({ error: "Thiếu tên hoặc nội dung." });
-
+    if (!name || !text) return res.status(400).json({ error: "Thiếu dữ liệu" });
+    
     try {
         let messages = [];
-        try {
-            const fileContent = fs.readFileSync(GROUP_FILE, "utf8");
-            messages = JSON.parse(fileContent);
-        } catch (e) {
-            // Nếu file lỗi JSON, khởi tạo lại mảng rỗng
-            messages = [];
+        if (fs.existsSync(GROUP_FILE)) {
+            messages = JSON.parse(fs.readFileSync(GROUP_FILE, "utf8"));
         }
-
         messages.push({ sender: name, text });
         fs.writeFileSync(GROUP_FILE, JSON.stringify(messages, null, 2));
-
         res.json({ success: true });
-    } catch (error) {
-        console.error("Lỗi lưu tin nhắn:", error);
-        res.status(500).json({ error: "Lỗi server khi lưu tin nhắn" });
+    } catch (e) { res.status(500).json({ error: "Lỗi lưu file" }); }
+});
+
+// API CHATBOT
+app.post("/bot", async (req, res) => {
+    const { text } = req.body;
+    console.log("User hỏi:", text); // Xem trong Log của Render
+
+    if (!GEMINI_API_KEY) {
+        console.error("LỖI: Chưa cài đặt biến môi trường GEMINI_API_KEY trên Render!");
+        return res.json({ sender: "Bot", text: "Lỗi Server: Chủ web chưa cài đặt API Key trong phần Environment." });
+    }
+
+    try {
+        const result = await axios.post(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+            { contents: [{ parts: [{ text: text }] }] },
+            { headers: { "Content-Type": "application/json" } }
+        );
+
+        const reply = result.data.candidates?.[0]?.content?.parts?.[0]?.text || "Bot không có câu trả lời.";
+        res.json({ sender: "Bot", text: reply });
+
+    } catch (err) {
+        console.error("Gemini API Lỗi:", err.response?.data || err.message);
+        res.json({ sender: "Bot", text: "Bot đang quá tải hoặc lỗi kết nối." });
     }
 });
 
-// API: Chatbot AI (Cập nhật Model Gemini 1.5 Flash)
-app.post("/bot", async (req, res) => {
-    const { text } = req.body;
-    if (!text) return res.status(400).json({ error: "Thiếu nội dung." });
+app.use(express.static("."));
 
-    // Kiểm tra xem người dùng đã thay key chưa
-    if (GEMINI_API_KEY === "API_KEY_GEMINI" || !GEMINI_API_KEY) {
-        return res.json({ sender: "Bot", text: "Lỗi: Bạn chưa điền API Key vào file server.js!" });
-    }
-
-    let botReply = "Bot gặp lỗi khi xử lý.";
-
-    try {
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server Render started on port ${PORT}`));
