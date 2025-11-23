@@ -9,10 +9,10 @@ app.use(express.json());
 
 const GROUP_FILE = "group.json";
 
-// Lấy Key từ biến môi trường của Render (Bảo mật)
+// Lấy Key từ biến môi trường của Render
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// Tạo file group chat ảo nếu chưa tồn tại (Tránh lỗi crash server)
+// Tạo file group chat ảo nếu chưa tồn tại
 if (!fs.existsSync(GROUP_FILE)) {
     try {
         fs.writeFileSync(GROUP_FILE, "[]");
@@ -26,7 +26,6 @@ app.get("/groupMessages", (req, res) => {
     try {
         if (!fs.existsSync(GROUP_FILE)) return res.json([]);
         const data = fs.readFileSync(GROUP_FILE, "utf8");
-        // Nếu file rỗng hoặc lỗi, trả về mảng rỗng
         res.json(data ? JSON.parse(data) : []);
     } catch (error) {
         console.error("Lỗi đọc file group:", error);
@@ -49,38 +48,35 @@ app.post("/groupMessages", (req, res) => {
         }
 
         messages.push({ sender: name, text });
-        
-        // Giới hạn chỉ lưu 50 tin nhắn gần nhất để file không quá nặng
         if (messages.length > 50) messages = messages.slice(-50);
 
         fs.writeFileSync(GROUP_FILE, JSON.stringify(messages, null, 2));
         res.json({ success: true });
     } catch (error) {
         console.error("Lỗi lưu tin nhắn:", error);
-        res.json({ success: false }); // Vẫn trả về JSON để client không bị treo
+        res.json({ success: false });
     }
 });
 
-// 3. API Chatbot AI (Đã cập nhật sang model gemini-1.5-flash)
+// 3. API Chatbot AI
 app.post("/bot", async (req, res) => {
     const { text } = req.body;
-    
-    // In log để bạn kiểm tra trên Dashboard Render
     console.log("User hỏi:", text);
 
-    // Kiểm tra xem đã cài Key trên Render chưa
     if (!GEMINI_API_KEY) {
-        console.error("LỖI: Chưa có biến môi trường GEMINI_API_KEY!");
         return res.json({ 
             sender: "Bot", 
-            text: "Lỗi Server: Chủ web chưa cài đặt API Key trong phần Environment Variables trên Render." 
+            text: "Lỗi Server: Chưa cài đặt API Key trong Environment Variables." 
         });
     }
 
     try {
-        // SỬA LỖI Ở ĐÂY: Đổi 'gemini-pro' thành 'gemini-1.5-flash'
+        // --- CẬP NHẬT QUAN TRỌNG: Dùng 'gemini-1.5-flash-latest' ---
+        // Nếu vẫn lỗi, bạn hãy thử đổi dòng dưới thành: 'gemini-1.0-pro'
+        const modelName = "gemini-1.5-flash-latest";
+        
         const result = await axios.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
             {
                 contents: [{
                     parts: [{ text: text }]
@@ -89,26 +85,23 @@ app.post("/bot", async (req, res) => {
             { headers: { "Content-Type": "application/json" } }
         );
 
-        // Lấy câu trả lời
         const botReply = result.data.candidates?.[0]?.content?.parts?.[0]?.text || "Bot không nghĩ ra câu trả lời.";
-        
         res.json({ sender: "Bot", text: botReply });
 
     } catch (err) {
-        // Ghi chi tiết lỗi ra Log của Render để debug
         console.error("---------------- LỖI GEMINI API ----------------");
-        // In rõ lỗi phản hồi từ Google nếu có
+        // In lỗi chi tiết ra log để debug
         console.error(err.response?.data || err.message);
         console.error("------------------------------------------------");
-
+        
         res.json({ 
             sender: "Bot", 
-            text: "Xin lỗi, Bot đang gặp sự cố kết nối với Google. Vui lòng thử lại sau." 
+            text: "Xin lỗi, Bot đang gặp sự cố kết nối. Vui lòng thử lại sau." 
         });
     }
 });
 
-// Chạy file index.html
+// Serve file tĩnh (index.html, style, v.v.)
 app.use(express.static("."));
 
 const PORT = process.env.PORT || 3000;
