@@ -1,191 +1,87 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-<meta charset="UTF-8">
-<title>NoteMate++</title>
-<style>
-body { margin:0; font-family: Arial; display:flex; height:100vh; background:#f0f2f5; }
-.sidebar { width:220px; background:#004aad; color:white; padding:20px 10px; }
-.sidebar div { padding:15px; margin-bottom:10px; border-radius:8px; cursor:pointer; background:#005be0; text-align:center; font-size:18px; }
-.sidebar div:hover { background:#0077ff; }
-.main { flex:1; padding:20px; }
-.record-box { background:#fff; padding:20px; width:60%; border-radius:12px; box-shadow:0 0 10px #00000033; }
-.audio-list { margin-top:15px; padding:10px; background:#d0e4ff; border-radius:8px; max-height:180px; overflow-y:auto; }
-.record-btn { background:red; color:white; padding:8px 20px; border:none; border-radius:12px; cursor:pointer; }
-.popup { width:350px; height:450px; position:fixed; background:white; border-radius:12px; box-shadow:0 0 12px #00000055; right:20px; bottom:20px; display:none; flex-direction:column; }
-.popup header { background:#007bff; color:white; padding:10px; border-radius:12px 12px 0 0; cursor:move; text-align:center; }
-.messages { flex:1; padding:10px; overflow-y:auto; font-size:15px; }
-.input-area { display:flex; padding:10px; }
-.input-area input { flex:1; padding:8px; border:1px solid #aaa; border-radius:8px; }
-.input-area button { margin-left:5px; background:#007bff; border:none; color:white; padding:8px 12px; border-radius:8px; cursor:pointer; }
-#notePopup { width:400px; height:300px; left:50%; top:50%; transform:translate(-50%, -50%); display:flex; }
-#notePopup textarea { flex:1; margin:10px; resize:none; padding:10px; border-radius:8px; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoteMate++</title>
+    <style>
+        body { margin:0; font-family: Arial, sans-serif; display:flex; height:100vh; background:#f0f2f5; overflow: hidden; }
+        
+        /* Sidebar */
+        .sidebar { width:220px; background:#004aad; color:white; padding:20px 10px; display: flex; flex-direction: column; gap: 10px; }
+        .sidebar div { padding:15px; border-radius:8px; cursor:pointer; background:#005be0; text-align:center; font-size:16px; transition: 0.3s; }
+        .sidebar div:hover { background:#0077ff; transform: translateX(5px); }
+        
+        /* Main Content */
+        .main { flex:1; padding:20px; display: flex; justify-content: center; align-items: start; }
+        .record-box { background:#fff; padding:30px; width:60%; border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.1); text-align: center; }
+        .audio-list { margin-top:20px; padding:10px; background:#f8f9fa; border-radius:8px; max-height:300px; overflow-y:auto; text-align: left; }
+        .record-btn { background:#ff4757; color:white; padding:12px 30px; border:none; border-radius:25px; cursor:pointer; font-size: 16px; font-weight: bold; transition: 0.2s; }
+        .record-btn:active { transform: scale(0.95); }
+        .record-btn.recording { background: #2ed573; }
+
+        /* Popups */
+        .popup { width:350px; height:450px; position:fixed; background:white; border-radius:12px; box-shadow:0 0 20px rgba(0,0,0,0.2); right:20px; bottom:20px; display:none; flex-direction:column; z-index: 1000; overflow: hidden; }
+        .popup header { background:#007bff; color:white; padding:12px; cursor:move; text-align:center; font-weight: bold; user-select: none; }
+        .messages { flex:1; padding:15px; overflow-y:auto; font-size:14px; background: #f1f1f1; display: flex; flex-direction: column; gap: 8px; }
+        
+        /* Message Bubbles */
+        .messages div { max-width: 80%; padding: 8px 12px; border-radius: 10px; word-wrap: break-word; }
+        .msg-user { align-self: flex-end; background: #007bff; color: white; }
+        .msg-bot, .msg-other { align-self: flex-start; background: white; border: 1px solid #ddd; color: #333; }
+
+        .input-area { display:flex; padding:10px; background: white; border-top: 1px solid #eee; }
+        .input-area input { flex:1; padding:10px; border:1px solid #ccc; border-radius:20px; outline: none; }
+        .input-area button { margin-left:8px; background:#007bff; border:none; color:white; padding:8px 15px; border-radius:20px; cursor:pointer; }
+        .input-area button:hover { background: #0056b3; }
+
+        /* Note Popup specifically */
+        #notePopup { width:400px; height:300px; left:50%; top:50%; transform:translate(-50%, -50%); right: auto; bottom: auto; }
+        #notePopup textarea { flex:1; margin:10px; resize:none; padding:10px; border: 1px solid #ddd; border-radius:8px; outline: none; }
+
+        /* Name Modal */
+        #nameOverlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); z-index: 2000; display: flex; justify-content: center; align-items: center; }
+        #nameBox { background: white; padding: 25px; border-radius: 12px; text-align: center; width: 300px; }
+    </style>
 </head>
 <body>
 
-<div id="namePopup" style="position: fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:white; padding:20px; border-radius:12px; box-shadow:0 0 20px #0003; width:300px; text-align:center; z-index:2000;">
-<h3>Nhập tên của bạn</h3>
-<input id="nameInput" placeholder="Tên..." style="width:90%; padding:8px; border-radius:8px; margin-bottom:10px;">
-<button onclick="saveName()" style="padding:8px 20px; background:#007bff; color:white; border:none; border-radius:8px; cursor:pointer;">OK</button>
-</div>
+    <div id="nameOverlay">
+        <div id="nameBox">
+            <h3>Nhập tên của bạn</h3>
+            <input id="nameInput" placeholder="Tên hiển thị..." style="width:90%; padding:10px; border-radius:8px; border: 1px solid #ccc; margin-bottom:15px;">
+            <button onclick="saveName()" style="padding:10px 30px; background:#007bff; color:white; border:none; border-radius:8px; cursor:pointer;">Xác nhận</button>
+        </div>
+    </div>
 
-<div class="sidebar">
-<div onclick="openNote()">📝 Ghi chú</div>
-<div onclick="toggleChat()">🤖 Chatbot AI</div>
-<div onclick="openGroupChat()">🌍 Cộng đồng</div>
-</div>
+    <div class="sidebar">
+        <div onclick="togglePopup('notePopup')">📝 Ghi chú</div>
+        <div onclick="togglePopup('chatPopup')">🤖 Chatbot AI</div>
+        <div onclick="togglePopup('groupChatPopup')">🌍 Cộng đồng</div>
+    </div>
 
-<div class="main">
-<div class="record-box">
-<h2>Ghi âm</h2>
-<button class="record-btn">Bắt đầu ghi</button>
-<div class="audio-list"></div>
-</div>
-</div>
+    <div class="main">
+        <div class="record-box">
+            <h2>🎙️ Ghi âm NoteMate</h2>
+            <button class="record-btn" id="recordBtn">Bắt đầu ghi</button>
+            <div class="audio-list" id="audioList"></div>
+        </div>
+    </div>
 
-<!-- Chatbot -->
-<div id="chatPopup" class="popup">
-<header>Chatbot AI</header>
-<div id="messages" class="messages"></div>
-<div class="input-area">
-<input id="msgInput" />
-<button onclick="sendBotMessage()">Gửi</button>
-</div>
-</div>
+    <div id="chatPopup" class="popup">
+        <header>Chatbot AI</header>
+        <div id="botMessages" class="messages"></div>
+        <div class="input-area">
+            <input id="botInput" placeholder="Hỏi gì đó..." onkeypress="handleEnter(event, sendBotMessage)"/>
+            <button onclick="sendBotMessage()">Gửi</button>
+        </div>
+    </div>
 
-<!-- Group Chat -->
-<div id="groupChatPopup" class="popup">
-<header>Cộng đồng</header>
-<div id="groupMessages" class="messages"></div>
-<div class="input-area">
-<input id="groupMsgInput" />
-<button onclick="sendGroupMessage()">Gửi</button>
-</div>
-</div>
-
-<!-- Note -->
-<div id="notePopup" class="popup" style="display:flex;">
-<header>Ghi chú</header>
-<textarea id="noteText" placeholder="Nhập ghi chú..."></textarea>
-</div>
-
-<script>
-// Lưu tên người dùng
-function saveName(){
-    const name = document.getElementById("nameInput").value.trim();
-    if(!name) return alert("Hãy nhập tên!");
-    localStorage.setItem("username", name);
-    document.getElementById("namePopup").style.display = "none";
-}
-window.onload = () => {
-    if(!localStorage.getItem("username")) document.getElementById("namePopup").style.display="block";
-    else document.getElementById("namePopup").style.display="none";
-};
-
-// Drag popup
-function dragElement(elmnt){
-    const header = elmnt.querySelector("header");
-    let x=0,y=0,dx=0,dy=0;
-    header.onmousedown = e=>{
-        dx = e.clientX; dy = e.clientY;
-        document.onmousemove = move;
-        document.onmouseup = stop;
-    };
-    function move(e){ x=dx-e.clientX; y=dy-e.clientY; dx=e.clientX; dy=e.clientY;
-        elmnt.style.left=(elmnt.offsetLeft-x)+"px"; elmnt.style.top=(elmnt.offsetTop-y)+"px";
-    }
-    function stop(){ document.onmousemove=null; document.onmouseup=null; }
-}
-dragElement(chatPopup);
-dragElement(groupChatPopup);
-dragElement(notePopup);
-
-// Popups
-function openNote(){ notePopup.style.display="flex"; }
-function toggleChat(){ chatPopup.style.display=(chatPopup.style.display==="flex")?"none":"flex"; }
-function openGroupChat(){ groupChatPopup.style.display="flex"; }
-
-// Ghi âm
-let mediaRecorder,chunks=[];
-const recordBtn = document.querySelector(".record-btn");
-const audioList = document.querySelector(".audio-list");
-recordBtn.onclick = async ()=>{
-    if(recordBtn.textContent==="Bắt đầu ghi"){
-        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-        mediaRecorder = new MediaRecorder(stream);
-        chunks=[];
-        mediaRecorder.ondataavailable=e=>chunks.push(e.data);
-        mediaRecorder.onstop=()=>{
-            const audio=document.createElement("audio");
-            audio.controls=true;
-            audio.src=URL.createObjectURL(new Blob(chunks));
-            audioList.appendChild(audio);
-        };
-        mediaRecorder.start();
-        recordBtn.textContent="Dừng ghi";
-    }else{
-        mediaRecorder.stop();
-        recordBtn.textContent="Bắt đầu ghi";
-    }
-};
-
-// URL server
-const API_URL = ""; // để trống nếu chạy local, ví dụ: http://localhost:3000
-
-// Chat nhóm
-async function sendGroupMessage(){
-    const text = groupMsgInput.value.trim();
-    if(!text) return;
-    const name = localStorage.getItem("username");
-    await fetch(`${API_URL}/groupMessages`,{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({name,text})
-    });
-    groupMsgInput.value="";
-    loadGroupMessages();
-}
-async function loadGroupMessages(){
-    const res = await fetch(`${API_URL}/groupMessages`);
-    const data = await res.json();
-    groupMessages.innerHTML="";
-    data.forEach(m=>{
-        const div=document.createElement("div");
-        div.innerHTML=`<strong>${m.sender}:</strong> ${m.text}`;
-        groupMessages.appendChild(div);
-    });
-    groupMessages.scrollTop=groupMessages.scrollHeight;
-}
-setInterval(loadGroupMessages,2000);
-
-// Chatbot
-async function sendBotMessage(){
-    const text = msgInput.value.trim();
-    if(!text) return;
-
-    // --- THÊM ĐOẠN NÀY ĐỂ HIỆN TIN NHẮN CỦA BẠN ---
-    const userDiv = document.createElement("div");
-    userDiv.innerHTML = `<strong>Bạn:</strong> ${text}`;
-    document.getElementById("messages").appendChild(userDiv);
-    document.getElementById("messages").scrollTop = document.getElementById("messages").scrollHeight;
-    // ------------------------------------------------
-
-    msgInput.value=""; // Xóa ô nhập liệu ngay lập tức
-
-    const res = await fetch(`${API_URL}/bot`,{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({text})
-    });
-    
-    const data = await res.json();
-    const div = document.createElement("div");
-    div.innerHTML = `<strong>${data.sender}:</strong> ${data.text}`;
-    messages.appendChild(div);
-    messages.scrollTop = messages.scrollHeight;
-}
-</script>
-
-</body>
-</html>
+    <div id="groupChatPopup" class="popup">
+        <header>Cộng đồng chung</header>
+        <div id="groupMessages" class="messages"></div>
+        <div class="input-area">
+            <input id="groupInput" placeholder="Chat với mọi người..." onkeypress="handleEnter(event, sendGroupMessage)"/>
+            <button onclick="sendGroupMessage()">Gửi</button>
+        </div>
+    </div>
