@@ -163,17 +163,27 @@ setInterval(loadGroupMessages,2000);
 async function sendBotMessage(){
     const text = msgInput.value.trim();
     if(!text) return;
+
+    // --- THÊM ĐOẠN NÀY ĐỂ HIỆN TIN NHẮN CỦA BẠN ---
+    const userDiv = document.createElement("div");
+    userDiv.innerHTML = `<strong>Bạn:</strong> ${text}`;
+    document.getElementById("messages").appendChild(userDiv);
+    document.getElementById("messages").scrollTop = document.getElementById("messages").scrollHeight;
+    // ------------------------------------------------
+
+    msgInput.value=""; // Xóa ô nhập liệu ngay lập tức
+
     const res = await fetch(`${API_URL}/bot`,{
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({text})
     });
+    
     const data = await res.json();
-    const div=document.createElement("div");
-    div.innerHTML=`<strong>${data.sender}:</strong> ${data.text}`;
+    const div = document.createElement("div");
+    div.innerHTML = `<strong>${data.sender}:</strong> ${data.text}`;
     messages.appendChild(div);
-    messages.scrollTop=messages.scrollHeight;
-    msgInput.value="";
+    messages.scrollTop = messages.scrollHeight;
 }
 </script>
 
