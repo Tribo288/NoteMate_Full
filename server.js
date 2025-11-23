@@ -9,13 +9,12 @@ app.use(express.json());
 
 const GROUP_FILE = "group.json";
 
-// Lấy Key từ biến môi trường (Lưu ý: Đã đổi tên biến)
+// Lấy Key Hugging Face
 const HUGGING_FACE_API_KEY = process.env.HUGGING_FACE_API_KEY;
 
-// Chọn Model (Mistral 7B rất tốt cho Chat)
-const HF_MODEL = "mistralai/Mistral-7B-Instruct-v0.2";
-// const HF_MODEL = "HuggingFaceH4/zephyr-7b-beta"; // Hoặc dùng model này nếu thích
-
+// --- ĐỔI SANG MODEL NHẸ HƠN VÀ ỔN ĐỊNH HƠN ---
+const HF_MODEL = "HuggingFaceH4/zephyr-7b-beta"; 
+// Link API
 const API_URL = `https://api-inference.huggingface.co/models/${HF_MODEL}`;
 
 // Tạo file group chat ảo
@@ -48,20 +47,20 @@ app.post("/groupMessages", (req, res) => {
     } catch (error) { res.json({ success: false }); }
 });
 
-// --- HÀM GỌI HUGGING FACE (CÓ CHẾ ĐỘ CHỜ MODEL LOAD) ---
-async function queryHuggingFace(text, retries = 3) {
+// --- HÀM GỌI HUGGING FACE (CÓ RETRY) ---
+async function queryHuggingFace(text, retries = 5) {
     try {
-        // Cấu trúc prompt để Bot hiểu là đang Chat (quan trọng với Mistral)
-        const prompt = `<s>[INST] Bạn là trợ lý ảo hữu ích. Hãy trả lời câu hỏi sau bằng tiếng Việt ngắn gọn: ${text} [/INST]`;
+        // Prompt được tối ưu cho Zephyr
+        const prompt = `<|system|>\nBạn là trợ lý ảo hữu ích, trả lời ngắn gọn bằng tiếng Việt.</s>\n<|user|>\n${text}</s>\n<|assistant|>\n`;
 
         const response = await axios.post(
             API_URL,
             {
                 inputs: prompt,
                 parameters: {
-                    max_new_tokens: 500, // Độ dài câu trả lời
-                    return_full_text: false, // Chỉ lấy phần trả lời, không lấy lại câu hỏi
-                    temperature: 0.7 // Độ sáng tạo
+                    max_new_tokens: 250,
+                    return_full_text: false,
+                    temperature: 0.7
                 }
             },
             {
@@ -74,28 +73,31 @@ async function queryHuggingFace(text, retries = 3) {
         return response.data[0].generated_text;
 
     } catch (error) {
-        // Xử lý lỗi đặc trưng của Hugging Face: "Model is loading"
-        if (error.response && error.response.data && error.response.data.error && error.response.data.error.includes("loading")) {
+        const errData = error.response?.data;
+        // Nếu lỗi là "Model is loading" (Model đang khởi động)
+        if (errData?.error?.includes("loading")) {
             if (retries > 0) {
-                const waitTime = error.response.data.estimated_time || 20;
-                console.log(`⏳ Model đang khởi động... Đợi ${waitTime}s rồi thử lại.`);
-                
-                // Đợi xong gọi lại hàm này (Đệ quy)
+                const waitTime = Math.ceil(errData.estimated_time || 10);
+                console.log(`⏳ Model đang bật... Đợi ${waitTime} giây...`);
+                // Chờ và gọi lại
                 await new Promise(r => setTimeout(r, waitTime * 1000));
                 return queryHuggingFace(text, retries - 1);
             }
         }
-        throw error; // Nếu lỗi khác thì ném ra ngoài
+        throw error;
     }
 }
 
-// 3. API Chatbot AI (Dùng Hugging Face)
+// 3. API Chatbot AI
 app.post("/bot", async (req, res) => {
     const { text } = req.body;
-    console.log("User hỏi (HF):", text);
+    console.log("User hỏi:", text);
 
     if (!HUGGING_FACE_API_KEY) {
-        return res.json({ sender: "Bot", text: "Lỗi: Chưa cài HUGGING_FACE_API_KEY trên Render." });
+        return res.json({ 
+            sender: "Bot", 
+            text: "LỖI CÀI ĐẶT: Bạn chưa thêm biến HUGGING_FACE_API_KEY vào Render." 
+        });
     }
 
     try {
@@ -103,12 +105,27 @@ app.post("/bot", async (req, res) => {
         res.json({ sender: "Bot", text: botReply.trim() });
 
     } catch (err) {
-        console.error("--- LỖI HUGGING FACE API ---");
-        console.error(err.response?.data || err.message);
+        console.error("--- LỖI API ---");
+        // In lỗi chi tiết ra log Render
+        const errorDetails = err.response?.data || err.message;
+        console.error(errorDetails);
+
+        // --- QUAN TRỌNG: Trả về lỗi chi tiết cho User thấy để sửa ---
+        let userMessage = "Lỗi kết nối.";
         
+        if (err.response?.status === 401) {
+            userMessage = "Lỗi 401: API Key không đúng hoặc không có quyền truy cập.";
+        } else if (err.response?.status === 503) {
+            userMessage = "Lỗi 503: Server Hugging Face đang quá tải. Hãy thử lại sau 1 phút.";
+        } else if (typeof errorDetails === 'object') {
+             userMessage = "Lỗi lạ: " + JSON.stringify(errorDetails);
+        } else {
+             userMessage = "Lỗi: " + errorDetails;
+        }
+
         res.json({ 
             sender: "Bot", 
-            text: "Bot đang ngủ hoặc gặp lỗi kết nối. Vui lòng thử lại sau 30 giây." 
+            text: `⚠️ ${userMessage}` 
         });
     }
 });
