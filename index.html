@@ -27,4 +27,248 @@ body { margin:0; font-family: Arial; display:flex; height:100vh; background:#f0f
 
 /* Ghi chú nằm giữa (đã chỉnh trong JS/CSS cũ) */
 #notePopup { top: 50%; left: 50%; transform: translate(-50%, -50%); display:flex; }
-#notePopup textarea { flex:1
+#notePopup textarea { flex:1; margin:10px; resize:none; padding:10px; border-radius:8px; }
+
+.messages { flex:1; padding:10px; overflow-y:auto; font-size:15px; }
+.input-area { display:flex; padding:10px; }
+.input-area input { flex:1; padding:8px; border:1px solid #aaa; border-radius:8px; }
+.input-area button { margin-left:5px; background:#007bff; border:none; color:white; padding:8px 12px; border-radius:8px; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<div id="namePopup" style="position: fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:white; padding:20px; border-radius:12px; box-shadow:0 0 20px #0003; width:300px; text-align:center; z-index:2000;">
+<h3>Nhập tên của bạn</h3>
+<input id="nameInput" placeholder="Tên..." style="width:90%; padding:8px; border-radius:8px; margin-bottom:10px;">
+<button onclick="saveName()" style="padding:8px 20px; background:#007bff; color:white; border:none; border-radius:8px; cursor:pointer;">OK</button>
+</div>
+
+<div class="sidebar">
+<div onclick="openNote()">📝 Ghi chú</div>
+<div onclick="toggleChat()">🤖 Chatbot AI</div>
+<div onclick="openGroupChat()">🌍 Cộng đồng</div>
+</div>
+
+<div class="main">
+<div class="record-box">
+<h2>Ghi âm</h2>
+<button class="record-btn">Bắt đầu ghi</button>
+<div class="audio-list"></div>
+</div>
+</div>
+
+<div id="chatPopup" class="popup">
+<header>Chatbot AI (Kéo tôi)</header>
+<div id="messages" class="messages"></div>
+<div class="input-area">
+<input id="msgInput" placeholder="Nhập tin nhắn..." />
+<button onclick="sendBotMessage()">Gửi</button>
+</div>
+</div>
+
+<div id="groupChatPopup" class="popup">
+<header>Cộng đồng (Kéo tôi)</header>
+<div id="groupMessages" class="messages"></div>
+<div class="input-area">
+<input id="groupMsgInput" placeholder="Nhập tin nhắn..." />
+<button onclick="sendGroupMessage()">Gửi</button>
+</div>
+</div>
+
+<div id="notePopup" class="popup" style="display:flex;">
+<header>Ghi chú</header>
+<textarea id="noteText" placeholder="Nhập ghi chú..."></textarea>
+</div>
+
+<script>
+// --- JAVASCRIPT ---
+
+function saveName(){
+    const name = document.getElementById("nameInput").value.trim();
+    if(!name) return alert("Hãy nhập tên!");
+    localStorage.setItem("username", name);
+    document.getElementById("namePopup").style.display = "none";
+}
+window.onload = () => {
+    if(!localStorage.getItem("username")) document.getElementById("namePopup").style.display="block";
+    else document.getElementById("namePopup").style.display="none";
+};
+
+// --- HÀM KÉO THẢ (ĐÃ NÂNG CẤP CHO MOBILE) ---
+function dragElement(elmnt) {
+    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+    const header = elmnt.querySelector("header");
+
+    if (header) {
+        // Sự kiện chuột (PC)
+        header.onmousedown = dragMouseDown;
+        // Sự kiện cảm ứng (Mobile)
+        header.ontouchstart = dragTouchStart;
+    }
+
+    // --- Xử lý chuột (PC) ---
+    function dragMouseDown(e) {
+        e = e || window.event;
+        e.preventDefault();
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        document.onmouseup = closeDragElement;
+        document.onmousemove = elementDrag;
+    }
+
+    function elementDrag(e) {
+        e = e || window.event;
+        e.preventDefault();
+        pos1 = pos3 - e.clientX;
+        pos2 = pos4 - e.clientY;
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        // Nếu là popup Note đang canh giữa, cần reset transform để kéo mượt
+        if(elmnt.id === "notePopup") elmnt.style.transform = "none";
+        
+        elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
+        elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+    }
+
+    // --- Xử lý cảm ứng (Mobile) ---
+    function dragTouchStart(e) {
+        const touch = e.touches[0];
+        pos3 = touch.clientX;
+        pos4 = touch.clientY;
+        document.ontouchend = closeDragElement;
+        document.ontouchmove = elementDragTouch;
+    }
+
+    function elementDragTouch(e) {
+        // Ngăn cuộn màn hình khi đang kéo popup
+        // e.preventDefault(); 
+        const touch = e.touches[0];
+        pos1 = pos3 - touch.clientX;
+        pos2 = pos4 - touch.clientY;
+        pos3 = touch.clientX;
+        pos4 = touch.clientY;
+
+        if(elmnt.id === "notePopup") elmnt.style.transform = "none";
+
+        elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
+        elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+    }
+
+    function closeDragElement() {
+        document.onmouseup = null;
+        document.onmousemove = null;
+        document.ontouchend = null;
+        document.ontouchmove = null;
+    }
+}
+
+// Kích hoạt kéo thả
+dragElement(document.getElementById("chatPopup"));
+dragElement(document.getElementById("groupChatPopup"));
+dragElement(document.getElementById("notePopup"));
+
+// Popups Toggle
+function openNote(){ document.getElementById("notePopup").style.display="flex"; }
+function toggleChat(){ 
+    const p = document.getElementById("chatPopup");
+    p.style.display=(p.style.display==="flex")?"none":"flex"; 
+}
+function openGroupChat(){ document.getElementById("groupChatPopup").style.display="flex"; }
+
+// Ghi âm
+let mediaRecorder,chunks=[];
+const recordBtn = document.querySelector(".record-btn");
+const audioList = document.querySelector(".audio-list");
+recordBtn.onclick = async ()=>{
+    if(recordBtn.textContent==="Bắt đầu ghi"){
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+            mediaRecorder = new MediaRecorder(stream);
+            chunks=[];
+            mediaRecorder.ondataavailable=e=>chunks.push(e.data);
+            mediaRecorder.onstop=()=>{
+                const audio=document.createElement("audio");
+                audio.controls=true;
+                audio.src=URL.createObjectURL(new Blob(chunks));
+                audioList.appendChild(audio);
+            };
+            mediaRecorder.start();
+            recordBtn.textContent="Dừng ghi";
+        } catch(e) { alert("Chưa cấp quyền mic!"); }
+    }else{
+        mediaRecorder.stop();
+        recordBtn.textContent="Bắt đầu ghi";
+    }
+};
+
+// API URL (Để trống cho Render)
+const API_URL = ""; 
+
+// Chat nhóm
+async function sendGroupMessage(){
+    const input = document.getElementById("groupMsgInput");
+    const text = input.value.trim();
+    if(!text) return;
+    const name = localStorage.getItem("username");
+    
+    await fetch(`${API_URL}/groupMessages`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({name,text})
+    });
+    input.value="";
+    loadGroupMessages();
+}
+async function loadGroupMessages(){
+    try {
+        const res = await fetch(`${API_URL}/groupMessages`);
+        const data = await res.json();
+        const box = document.getElementById("groupMessages");
+        box.innerHTML="";
+        data.forEach(m=>{
+            const div=document.createElement("div");
+            div.innerHTML=`<strong>${m.sender}:</strong> ${m.text}`;
+            box.appendChild(div);
+        });
+    } catch(e) {}
+}
+setInterval(loadGroupMessages,2000);
+
+// Chatbot AI
+async function sendBotMessage(){
+    const input = document.getElementById("msgInput");
+    const box = document.getElementById("messages");
+    const text = input.value.trim();
+    if(!text) return;
+
+    const userDiv = document.createElement("div");
+    userDiv.innerHTML = `<strong>Bạn:</strong> ${text}`;
+    userDiv.style.color = "blue";
+    box.appendChild(userDiv);
+    box.scrollTop = box.scrollHeight;
+
+    input.value=""; 
+
+    try {
+        const res = await fetch(`${API_URL}/bot`,{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({text})
+        });
+        
+        const data = await res.json();
+        const div = document.createElement("div");
+        div.innerHTML = `<strong>${data.sender}:</strong> ${data.text}`;
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    } catch(err) {
+        const div = document.createElement("div");
+        div.style.color = "red";
+        div.innerHTML = "Lỗi kết nối Server!";
+        box.appendChild(div);
+    }
+}
+</script>
+
+</body>
+</html>
