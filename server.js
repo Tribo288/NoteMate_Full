@@ -9,7 +9,7 @@ app.use(cors());
 app.use(express.json());
 
 const CHAT_FILE = "chat.json";
-const GEMINI_API_KEY = "API_KEY_CUA_BAN";   // <-- ĐỔI LẠI API KEY
+const GEMINI_API_KEY = "AIzaSyAUsoZeOAMP57GpnoQWYc6Bkc364nDeG10";   // <-- ĐỔI LẠI API KEY
 
 // Nếu chưa có file thì tạo mới
 if (!fs.existsSync(CHAT_FILE)) {
